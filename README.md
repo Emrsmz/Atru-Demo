@@ -15,7 +15,7 @@ framework.
 ### Language & formatting
 - **Turkish by default**, with a **TR / EN** toggle in the top-right (remembered
   per browser via `localStorage`).
-- Dates/times are shown Turkey-style — `gün.ay.yıl 24:saat` (e.g. `01.06.2026 14:30`).
+- Dates/times are shown as **`gg/aa/yyyy HH:mm`** (24-hour, e.g. `01/06/2026 14:30`).
 
 ### Hotel panel (`/login` → `/hotel`)
 - Register / log in (hotel name, username, password)
@@ -23,22 +23,31 @@ framework.
   departure/notes plus a list of passengers (each with an optional phone);
   one record is created per passenger
 - **Departure and phone are optional** — you can record an arrival-only transfer
-- Add, edit, and delete passenger transfer records
+- Passengers added together are **shown grouped**; edit a whole booking at once
+  (including adding/removing passengers) or delete the group
 - A hotel only ever sees and manages **its own** records
 
 ### Driver panel (`/driver/login` → `/driver`)
-- 3 separate driver accounts
 - See **all** records from **all** hotels, sorted by arrival time (soonest first)
+- Passengers from the same booking are **grouped** in one card/row
 - **List (stacked) or Card** view toggle (remembered per browser)
 - Hotel name shown on every record
 - Toggle a transfer **done / pending**
 - Filter by **Today / Upcoming / Completed / All**
 - Live **pending count** badge
 
+### Admin panel (`/admin/login` → `/admin`)
+- Single admin, authenticated via **environment variables** (`ADMIN_USER` /
+  `ADMIN_PASS`) — no admin account in the database
+- Add / edit / delete hotels and drivers, and set their passwords
+- Review every transfer (grouped, read-only)
+
 ### Security
 - Passwords hashed with **bcryptjs**
 - Sessions via **express-session** with `SESSION_SECRET` from the environment
-- Session middleware protects the `/hotel` and `/driver` routes
+- Session middleware protects the `/hotel`, `/driver` and `/admin` routes
+- **Login throttling**: after 30 failed attempts from one IP, logins are
+  temporarily blocked
 - All SQL uses parameterized statements; the frontend renders data via
   `textContent` (no `innerHTML`) to avoid XSS
 
@@ -98,34 +107,33 @@ SESSION_SECRET="some-long-random-string" node app.js
    | `SESSION_SECRET` | a long random string                   |
    | `DB_PATH`        | `/data/transfers.db`                   |
    | `NODE_ENV`       | `production`                           |
+   | `ADMIN_USER`     | admin panel username                   |
+   | `ADMIN_PASS`     | admin panel password (use a strong one)|
    | `PORT`           | *(leave unset — Railway provides it)*  |
 
 5. **Deploy.** The app auto-starts (`node app.js`, bound to `0.0.0.0`), and
-   Railway health-checks `GET /health`. Tables + default accounts are created
-   on first boot.
+   Railway health-checks `GET /health`. Tables are created on first boot; add
+   hotels and drivers from the admin panel (`/admin/login`).
 
 ---
 
-## 3. Default login credentials
+## 3. Accounts & the admin panel
 
-Seeded automatically on first run.
+The app ships with **no demo accounts** — the database starts empty. You create
+hotels and drivers yourself from the **admin panel**.
 
-**Drivers** (`/driver/login`)
+**Admin login (`/admin/login`)** is configured via environment variables (never
+stored in code or the database):
 
-| Username | Password   |
-| -------- | ---------- |
-| `sofor1` | `Sofor123` |
-| `sofor2` | `Sofor456` |
-| `sofor3` | `Sofor789` |
+| Variable     | Notes                                                              |
+| ------------ | ------------------------------------------------------------------ |
+| `ADMIN_USER` | admin username (default `admin`)                                   |
+| `ADMIN_PASS` | admin password — **required in production**; `admin` in dev if unset |
 
-**Demo hotels** (`/login`)
+> In production, if `ADMIN_PASS` is unset, admin login is disabled.
 
-| Username | Password   |
-| -------- | ---------- |
-| `hotel1` | `Hotel123` |
-| `hotel2` | `Hotel456` |
-
-> Change or remove these before any real-world use.
+From `/admin` you can add / edit / delete hotels and drivers, set their
+passwords, and review every transfer. Hotels can also self-register at `/login`.
 
 ---
 
@@ -141,6 +149,8 @@ Seeded automatically on first run.
 | POST   | `/hotel/transfer`                    | Add a transfer *(auth)*              |
 | PUT    | `/hotel/transfer/:id`                | Edit a transfer *(auth)*             |
 | DELETE | `/hotel/transfer/:id`                | Delete a transfer *(auth)*           |
+| PUT    | `/hotel/group/:groupId`              | Edit a whole booking *(auth)*        |
+| DELETE | `/hotel/group/:groupId`              | Delete a whole booking *(auth)*      |
 | GET    | `/driver/login`                      | Driver login page                    |
 | POST   | `/driver/login`                      | Driver authentication                |
 | GET    | `/driver`                            | Driver dashboard *(auth)*            |
@@ -148,6 +158,12 @@ Seeded automatically on first run.
 | GET    | `/api/transfers`                     | Logged-in hotel's transfers (JSON)   |
 | GET    | `/api/all-transfers`                 | All transfers for drivers (JSON)     |
 | GET    | `/api/me`                            | Current session identity (JSON)      |
+| GET    | `/admin/login`                       | Admin login page                     |
+| POST   | `/admin/login`                       | Admin authentication                 |
+| GET    | `/admin`                             | Admin panel *(admin)*                |
+| GET    | `/admin/api/data`                    | Hotels, drivers, transfers (JSON)    |
+| POST/PUT/DELETE | `/admin/hotels[/:id]`       | Manage hotels *(admin)*              |
+| POST/PUT/DELETE | `/admin/drivers[/:id]`      | Manage drivers *(admin)*             |
 | POST   | `/logout`                            | Clear the session                    |
 | GET    | `/health`                            | Health check → `200 OK`              |
 
@@ -158,19 +174,23 @@ Seeded automatically on first run.
 ```
 .
 ├── app.js              # Express server: sessions, routers, health check
-├── database.js         # SQLite init + auto-seed (drivers, demo hotels)
+├── database.js         # SQLite init + auto-migration (no demo seed)
 ├── routes/
-│   ├── hotel.js        # hotel auth + transfer CRUD (scoped to hotel)
+│   ├── hotel.js        # hotel auth + transfer/group CRUD (scoped to hotel)
 │   ├── driver.js       # driver auth + complete toggle
-│   └── api.js          # JSON endpoints for the dashboards
+│   ├── admin.js        # admin auth + hotel/driver management
+│   ├── api.js          # JSON endpoints for the dashboards
+│   └── loginLimiter.js # in-memory login attempt throttle
 ├── public/
 │   ├── style.css       # all styles (mobile-friendly)
-│   └── i18n.js         # TR/EN translations + language switch + TR date format
+│   └── i18n.js         # TR/EN translations + language switch + date format
 ├── views/
 │   ├── login.html      # hotel login + register
 │   ├── hotel.html      # hotel dashboard (form + table)
 │   ├── driver-login.html
-│   └── driver.html     # driver dashboard (cards + filters)
+│   ├── driver.html     # driver dashboard (cards + filters)
+│   ├── admin-login.html
+│   └── admin.html      # admin panel (hotels, drivers, transfers)
 ├── Procfile            # web: node app.js
 ├── railway.json        # NIXPACKS build + /data volume + healthcheck
 ├── .railwayignore
@@ -182,8 +202,9 @@ Seeded automatically on first run.
 
 ```
 hotels   (id, name, username, password_hash, created_at)
-transfers(id, hotel_id, flight_code, passenger_name, arrival_datetime,
+transfers(id, hotel_id, group_id, flight_code, passenger_name, arrival_datetime,
           departure_datetime, phone, notes, status, created_at, updated_at)
           status ∈ { 'pending', 'completed' }
+          group_id groups passengers added together (one booking)
 drivers  (id, username, password_hash, full_name, created_at)
 ```

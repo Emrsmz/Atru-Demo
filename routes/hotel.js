@@ -15,8 +15,10 @@
 
 const path = require('path');
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { db } = require('../database');
+const loginLimiter = require('./loginLimiter');
 
 const router = express.Router();
 const VIEWS = path.join(__dirname, '..', 'views');
@@ -74,6 +76,11 @@ router.get('/hotel', requireHotelPage, (req, res) => {
 
 // --- Auth ---
 router.post('/login', (req, res) => {
+  if (loginLimiter.blocked(req)) {
+    return res
+      .status(429)
+      .json({ error: 'Too many failed attempts.', code: 'too_many_attempts' });
+  }
   const { username, password } = req.body || {};
   if (!isNonEmpty(username) || !isNonEmpty(password)) {
     return res
@@ -84,10 +91,12 @@ router.post('/login', (req, res) => {
     .prepare('SELECT * FROM hotels WHERE username = ?')
     .get(username.trim());
   if (!hotel || !bcrypt.compareSync(password, hotel.password_hash)) {
+    loginLimiter.fail(req);
     return res
       .status(401)
       .json({ error: 'Invalid username or password.', code: 'invalid_credentials' });
   }
+  loginLimiter.succeed(req);
   req.session.hotelId = hotel.id;
   req.session.hotelName = hotel.name;
   req.session.hotelUsername = hotel.username;
@@ -149,15 +158,19 @@ router.post('/hotel/transfer', requireHotelApi, (req, res) => {
 
   const insert = db.prepare(
     `INSERT INTO transfers
-       (hotel_id, flight_code, passenger_name, arrival_datetime,
+       (hotel_id, group_id, flight_code, passenger_name, arrival_datetime,
         departure_datetime, phone, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
+  // One group_id per add operation so passengers entered together can be shown
+  // grouped (sharing flight / arrival / departure / notes) in the dashboard.
+  const groupId = crypto.randomUUID();
   const ids = [];
   const insertAll = db.transaction((rows) => {
     for (const p of rows) {
       const info = insert.run(
         req.session.hotelId,
+        groupId,
         shared.flight_code,
         p.passenger_name,
         shared.arrival_datetime,
@@ -244,6 +257,115 @@ router.delete('/hotel/transfer/:id', requireHotelApi, (req, res) => {
     return res.status(404).json({ error: 'Transfer not found.', code: 'not_found' });
   }
   res.json({ ok: true });
+});
+
+// --- Edit a whole group: update shared fields + reconcile its passengers ---
+// Passengers with an existing id are updated; ones without an id are inserted
+// into the same group (lets a hotel add a passenger later); existing passengers
+// missing from the list are removed.
+router.put('/hotel/group/:groupId', requireHotelApi, (req, res) => {
+  const groupId = String(req.params.groupId || '');
+  const existing = db
+    .prepare('SELECT id FROM transfers WHERE group_id = ? AND hotel_id = ?')
+    .all(groupId, req.session.hotelId);
+  if (existing.length === 0) {
+    return res.status(404).json({ error: 'Group not found.', code: 'not_found' });
+  }
+
+  const body = req.body || {};
+  const shared = readShared(body);
+  if (!isNonEmpty(shared.flight_code)) {
+    return res.status(400).json({ error: 'Flight code is required.', code: 'flight_required' });
+  }
+  if (!isNonEmpty(shared.arrival_datetime)) {
+    return res
+      .status(400)
+      .json({ error: 'Arrival date & time is required.', code: 'arrival_required' });
+  }
+
+  const passengers = Array.isArray(body.passengers)
+    ? body.passengers
+        .map((p) => ({
+          id: p && /^\d+$/.test(String(p.id)) ? Number(p.id) : null,
+          passenger_name: str(p && p.passenger_name),
+          phone: str(p && p.phone) || null,
+        }))
+        .filter((p) => p.passenger_name.length > 0)
+    : [];
+  if (passengers.length === 0) {
+    return res
+      .status(400)
+      .json({ error: 'At least one passenger name is required.', code: 'passenger_required' });
+  }
+
+  const existingIds = new Set(existing.map((r) => r.id));
+  const keepIds = new Set();
+  const update = db.prepare(
+    `UPDATE transfers
+        SET flight_code = ?, passenger_name = ?, arrival_datetime = ?,
+            departure_datetime = ?, phone = ?, notes = ?, updated_at = datetime('now')
+      WHERE id = ? AND group_id = ? AND hotel_id = ?`
+  );
+  const insert = db.prepare(
+    `INSERT INTO transfers
+       (hotel_id, group_id, flight_code, passenger_name, arrival_datetime,
+        departure_datetime, phone, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const del = db.prepare(
+    'DELETE FROM transfers WHERE id = ? AND group_id = ? AND hotel_id = ?'
+  );
+
+  const apply = db.transaction(() => {
+    for (const p of passengers) {
+      if (p.id != null && existingIds.has(p.id)) {
+        update.run(
+          shared.flight_code,
+          p.passenger_name,
+          shared.arrival_datetime,
+          shared.departure_datetime,
+          p.phone,
+          shared.notes,
+          p.id,
+          groupId,
+          req.session.hotelId
+        );
+        keepIds.add(p.id);
+      } else {
+        insert.run(
+          req.session.hotelId,
+          groupId,
+          shared.flight_code,
+          p.passenger_name,
+          shared.arrival_datetime,
+          shared.departure_datetime,
+          p.phone,
+          shared.notes
+        );
+      }
+    }
+    for (const id of existingIds) {
+      if (!keepIds.has(id)) del.run(id, groupId, req.session.hotelId);
+    }
+  });
+  apply();
+
+  const rows = db
+    .prepare('SELECT * FROM transfers WHERE group_id = ? AND hotel_id = ? ORDER BY id ASC')
+    .all(groupId, req.session.hotelId);
+  res.json({ ok: true, transfers: rows });
+});
+
+// --- Delete a whole group (all passengers in one booking) ---
+router.delete('/hotel/group/:groupId', requireHotelApi, (req, res) => {
+  const groupId = String(req.params.groupId || '');
+  const info = db
+    .prepare('DELETE FROM transfers WHERE group_id = ? AND hotel_id = ?')
+    .run(groupId, req.session.hotelId);
+  if (info.changes === 0) {
+    return res.status(404).json({ error: 'Group not found.', code: 'not_found' });
+  }
+  res.json({ ok: true, deleted: info.changes });
 });
 
 module.exports = router;

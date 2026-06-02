@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="app_title">Transfer Yönetim Sistemi</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="admin-page">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="brand-icon">🛠️</span> <span data-i18n="admin_panel">Admin Paneli</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="lang-switch" id="lang-switch"></div>
+          <span id="who" class="who"></span>
+          <button id="logout" class="btn btn-ghost btn-sm" type="button" data-i18n="logout">Çıkış</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Hotels -->
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="hotels_title">Oteller</h2>
+          <div class="head-right">
+            <span id="hotel-count" class="pill"></span>
+            <button class="btn btn-primary btn-sm" type="button" id="add-hotel" data-i18n="add_hotel">+ Otel ekle</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th data-i18n="col_name">Ad</th>
+                <th data-i18n="username">Kullanıcı adı</th>
+                <th data-i18n="col_created">Oluşturma</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="hotel-rows"></tbody>
+          </table>
+          <p id="hotel-empty" class="empty hidden" data-i18n="empty_hotels">Henüz otel yok.</p>
+        </div>
+      </section>
+
+      <!-- Drivers -->
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="drivers_title">Sürücüler</h2>
+          <div class="head-right">
+            <span id="driver-count" class="pill"></span>
+            <button class="btn btn-primary btn-sm" type="button" id="add-driver" data-i18n="add_driver">+ Sürücü ekle</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th data-i18n="driver_name">Ad Soyad</th>
+                <th data-i18n="username">Kullanıcı adı</th>
+                <th data-i18n="col_created">Oluşturma</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="driver-rows"></tbody>
+          </table>
+          <p id="driver-empty" class="empty hidden" data-i18n="empty_drivers">Henüz sürücü yok.</p>
+        </div>
+      </section>
+
+      <!-- Transfers (read-only) -->
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="all_transfers_title">Tüm transferler</h2>
+          <span id="transfer-count" class="pill"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th data-i18n="col_flight">Uçuş</th>
+                <th data-i18n="col_hotel">Otel</th>
+                <th data-i18n="col_arrival">Geliş</th>
+                <th data-i18n="col_departure">Dönüş</th>
+                <th data-i18n="col_passengers">Yolcular</th>
+                <th data-i18n="col_status">Durum</th>
+              </tr>
+            </thead>
+            <tbody id="transfer-rows"></tbody>
+          </table>
+          <p id="transfer-empty" class="empty hidden" data-i18n="admin_empty_transfers">Henüz transfer yok.</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Add/edit modal -->
+    <div id="modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3 id="modal-title"></h3>
+        <form id="entity-form" class="modal-form">
+          <label>
+            <span id="f-name-label"></span>
+            <input name="name" id="f-name" autocomplete="off" />
+          </label>
+          <label>
+            <span data-i18n="username">Kullanıcı adı</span>
+            <input name="username" id="f-username" autocomplete="off" required />
+          </label>
+          <label>
+            <span id="f-pass-label" data-i18n="password">Şifre</span>
+            <input name="password" id="f-password" type="password" autocomplete="new-password" />
+          </label>
+          <div class="modal-actions">
+            <button class="btn btn-primary" type="submit" data-i18n="save_changes">Kaydet</button>
+            <button class="btn btn-ghost" type="button" id="modal-cancel" data-i18n="cancel">İptal</button>
+          </div>
+          <p id="modal-msg" class="form-msg"></p>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      const whoEl = document.getElementById('who');
+      const hotelRows = document.getElementById('hotel-rows');
+      const driverRows = document.getElementById('driver-rows');
+      const transferRows = document.getElementById('transfer-rows');
+      const hotelEmpty = document.getElementById('hotel-empty');
+      const driverEmpty = document.getElementById('driver-empty');
+      const transferEmpty = document.getElementById('transfer-empty');
+      const hotelCount = document.getElementById('hotel-count');
+      const driverCount = document.getElementById('driver-count');
+      const transferCount = document.getElementById('transfer-count');
+
+      const modal = document.getElementById('modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalMsg = document.getElementById('modal-msg');
+      const entityForm = document.getElementById('entity-form');
+      const fNameWrap = document.getElementById('f-name').closest('label');
+      const fNameLabel = document.getElementById('f-name-label');
+      const fName = document.getElementById('f-name');
+      const fUsername = document.getElementById('f-username');
+      const fPassLabel = document.getElementById('f-pass-label');
+      const fPassword = document.getElementById('f-password');
+
+      let data = { hotels: [], drivers: [], transfers: [] };
+      let modalState = { type: 'hotel', mode: 'add', id: null };
+
+      function td(text) {
+        const el = document.createElement('td');
+        el.textContent = text == null || text === '' ? '—' : text;
+        return el;
+      }
+
+      function actionButtons(type, entity) {
+        const wrap = document.createElement('td');
+        wrap.className = 'row-actions';
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'btn btn-sm btn-ghost';
+        edit.textContent = i18n.t('edit');
+        edit.addEventListener('click', () => openModal(type, 'edit', entity));
+        const pw = document.createElement('button');
+        pw.type = 'button';
+        pw.className = 'btn btn-sm btn-ghost';
+        pw.textContent = i18n.t('pw_btn');
+        pw.addEventListener('click', () => quickPassword(type, entity));
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn-sm btn-danger';
+        del.textContent = i18n.t('delete');
+        del.addEventListener('click', () => removeEntity(type, entity.id));
+        wrap.append(edit, pw, del);
+        return wrap;
+      }
+
+      function renderHotels() {
+        hotelRows.replaceChildren();
+        hotelCount.textContent = data.hotels.length + ' ' + i18n.t('records_suffix');
+        hotelEmpty.classList.toggle('hidden', data.hotels.length > 0);
+        for (const h of data.hotels) {
+          const tr = document.createElement('tr');
+          tr.append(td(h.name), td(h.username), td(i18n.fmtDateTime(h.created_at)), actionButtons('hotel', h));
+          hotelRows.appendChild(tr);
+        }
+      }
+      function renderDrivers() {
+        driverRows.replaceChildren();
+        driverCount.textContent = data.drivers.length + ' ' + i18n.t('records_suffix');
+        driverEmpty.classList.toggle('hidden', data.drivers.length > 0);
+        for (const d of data.drivers) {
+          const tr = document.createElement('tr');
+          tr.append(td(d.full_name), td(d.username), td(i18n.fmtDateTime(d.created_at)), actionButtons('driver', d));
+          driverRows.appendChild(tr);
+        }
+      }
+      function groupTransfers(list) {
+        const map = new Map();
+        const order = [];
+        for (const t of list) {
+          const key = t.group_id ? 'g:' + t.group_id : 's:' + t.id;
+          if (!map.has(key)) {
+            map.set(key, []);
+            order.push(key);
+          }
+          map.get(key).push(t);
+        }
+        return order.map((k) => map.get(k));
+      }
+      function statusCell(group) {
+        const cell = document.createElement('td');
+        const done = group.filter((t) => t.status === 'completed').length;
+        const span = document.createElement('span');
+        span.className = 'badge ' + (done === group.length ? 'badge-done' : 'badge-pending');
+        span.textContent = done + '/' + group.length + ' ' + i18n.t('status_completed');
+        cell.appendChild(span);
+        return cell;
+      }
+      function renderTransfers() {
+        transferRows.replaceChildren();
+        const groups = groupTransfers(data.transfers);
+        transferCount.textContent = data.transfers.length + ' ' + i18n.t('records_suffix');
+        transferEmpty.classList.toggle('hidden', data.transfers.length > 0);
+        for (const group of groups) {
+          const lead = group[0];
+          const tr = document.createElement('tr');
+          const names = group.map((t) => t.passenger_name).join(', ');
+          tr.append(
+            td(lead.flight_code),
+            td(lead.hotel_name),
+            td(i18n.fmtDateTime(lead.arrival_datetime)),
+            td(i18n.fmtDateTime(lead.departure_datetime)),
+            td(names)
+          );
+          tr.appendChild(statusCell(group));
+          transferRows.appendChild(tr);
+        }
+      }
+      function renderAll() {
+        whoEl.textContent = data.admin || '';
+        renderHotels();
+        renderDrivers();
+        renderTransfers();
+      }
+
+      // --- Modal ---
+      function openModal(type, mode, entity) {
+        modalState = { type, mode, id: entity ? entity.id : null };
+        modalMsg.textContent = '';
+        modalMsg.className = 'form-msg';
+        const isHotel = type === 'hotel';
+        fNameLabel.textContent = isHotel ? i18n.t('hotel_name') : i18n.t('driver_name');
+        fName.required = isHotel; // hotel name required, driver name optional
+        fName.value = entity ? (isHotel ? entity.name : entity.full_name) || '' : '';
+        fUsername.value = entity ? entity.username || '' : '';
+        fPassword.value = '';
+        // Password required on add; optional on edit.
+        fPassLabel.textContent = mode === 'add' ? i18n.t('password') : i18n.t('new_password_opt');
+        fPassword.required = mode === 'add';
+        modalTitle.textContent = i18n.t(
+          (mode === 'add' ? 'new_' : 'edit_') + (isHotel ? 'hotel' : 'driver')
+        );
+        modal.classList.remove('hidden');
+        fName.focus();
+      }
+      function closeModal() {
+        modal.classList.add('hidden');
+      }
+      document.getElementById('modal-cancel').addEventListener('click', closeModal);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+
+      entityForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        modalMsg.textContent = '';
+        modalMsg.className = 'form-msg';
+        const { type, mode, id } = modalState;
+        const payload = {
+          username: fUsername.value.trim(),
+          password: fPassword.value,
+        };
+        if (type === 'hotel') payload.name = fName.value.trim();
+        else payload.full_name = fName.value.trim();
+        const base = type === 'hotel' ? '/admin/hotels' : '/admin/drivers';
+        const url = mode === 'add' ? base : base + '/' + id;
+        const method = mode === 'add' ? 'POST' : 'PUT';
+        try {
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (res.status === 401) return (window.location.href = '/admin/login');
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            modalMsg.textContent = body.code ? i18n.t('err_' + body.code) : body.error || i18n.t('err_generic');
+            modalMsg.classList.add('error');
+            return;
+          }
+          closeModal();
+          await loadData();
+        } catch (err) {
+          modalMsg.textContent = i18n.t('err_network');
+          modalMsg.classList.add('error');
+        }
+      });
+
+      async function quickPassword(type, entity) {
+        const pw = prompt(i18n.t('prompt_new_password'));
+        if (pw == null) return;
+        const base = type === 'hotel' ? '/admin/hotels' : '/admin/drivers';
+        const payload = { username: entity.username, password: pw };
+        if (type === 'hotel') payload.name = entity.name;
+        else payload.full_name = entity.full_name;
+        const res = await fetch(base + '/' + entity.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.status === 401) return (window.location.href = '/admin/login');
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(body.code ? i18n.t('err_' + body.code) : i18n.t('err_generic'));
+          return;
+        }
+        await loadData();
+      }
+
+      async function removeEntity(type, id) {
+        const msg = type === 'hotel' ? i18n.t('confirm_delete_hotel') : i18n.t('confirm_delete_driver');
+        if (!confirm(msg)) return;
+        const base = type === 'hotel' ? '/admin/hotels' : '/admin/drivers';
+        const res = await fetch(base + '/' + id, { method: 'DELETE' });
+        if (res.status === 401) return (window.location.href = '/admin/login');
+        if (res.ok) await loadData();
+      }
+
+      // --- Data ---
+      async function loadData() {
+        const res = await fetch('/admin/api/data');
+        if (res.status === 401) return (window.location.href = '/admin/login');
+        data = await res.json();
+        renderAll();
+      }
+
+      document.getElementById('add-hotel').addEventListener('click', () => openModal('hotel', 'add', null));
+      document.getElementById('add-driver').addEventListener('click', () => openModal('driver', 'add', null));
+      document.getElementById('logout').addEventListener('click', async () => {
+        await fetch('/logout', { method: 'POST' });
+        window.location.href = '/admin/login';
+      });
+      window.addEventListener('langchange', renderAll);
+
+      loadData();
+    </script>
+  </body>
+</html>

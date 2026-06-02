@@ -23,6 +23,7 @@
     passengers_section: { tr: 'Yolcular', en: 'Passengers' },
     add_transfer: { tr: 'Transfer ekle', en: 'Add transfer' },
     edit_transfer: { tr: 'Transferi düzenle', en: 'Edit transfer' },
+    edit_group: { tr: 'Grubu düzenle', en: 'Edit group' },
     flight_code: { tr: 'Uçuş kodu', en: 'Flight code' },
     arrival: { tr: 'Geliş tarihi & saati', en: 'Arrival date & time' },
     departure: { tr: 'Dönüş tarihi & saati', en: 'Departure date & time' },
@@ -35,6 +36,7 @@
     },
     add_passenger: { tr: '+ Yolcu ekle', en: '+ Add passenger' },
     remove: { tr: 'Kaldır', en: 'Remove' },
+    pick_datetime: { tr: 'Takvimden seç', en: 'Pick from calendar' },
     save_changes: { tr: 'Değişiklikleri kaydet', en: 'Save changes' },
     cancel: { tr: 'İptal', en: 'Cancel' },
     my_transfers: { tr: 'Transferlerim', en: 'My transfers' },
@@ -71,26 +73,74 @@
     departure_short: { tr: 'Dönüş', en: 'Departure' },
     hotel_label: { tr: 'Otel', en: 'Hotel' },
 
+    // --- admin panel ---
+    admin_panel: { tr: 'Admin Paneli', en: 'Admin Panel' },
+    hotels_title: { tr: 'Oteller', en: 'Hotels' },
+    drivers_title: { tr: 'Sürücüler', en: 'Drivers' },
+    all_transfers_title: { tr: 'Tüm transferler', en: 'All transfers' },
+    add_hotel: { tr: '+ Otel ekle', en: '+ Add hotel' },
+    add_driver: { tr: '+ Sürücü ekle', en: '+ Add driver' },
+    col_name: { tr: 'Ad', en: 'Name' },
+    col_created: { tr: 'Oluşturma', en: 'Created' },
+    col_hotel: { tr: 'Otel', en: 'Hotel' },
+    col_passengers: { tr: 'Yolcular', en: 'Passengers' },
+    driver_name: { tr: 'Ad Soyad', en: 'Full name' },
+    new_password_opt: { tr: 'Yeni şifre (boş = değişmez)', en: 'New password (blank = unchanged)' },
+    pw_btn: { tr: 'Şifre', en: 'Password' },
+    new_hotel: { tr: 'Yeni otel', en: 'New hotel' },
+    edit_hotel: { tr: 'Oteli düzenle', en: 'Edit hotel' },
+    new_driver: { tr: 'Yeni sürücü', en: 'New driver' },
+    edit_driver: { tr: 'Sürücüyü düzenle', en: 'Edit driver' },
+    empty_hotels: { tr: 'Henüz otel yok.', en: 'No hotels yet.' },
+    empty_drivers: { tr: 'Henüz sürücü yok.', en: 'No drivers yet.' },
+    admin_empty_transfers: { tr: 'Henüz transfer yok.', en: 'No transfers yet.' },
+    confirm_delete_hotel: {
+      tr: 'Bu otel ve TÜM transferleri silinecek. Emin misin?',
+      en: 'This hotel and ALL its transfers will be deleted. Are you sure?',
+    },
+    confirm_delete_driver: { tr: 'Bu sürücü silinsin mi?', en: 'Delete this driver?' },
+    prompt_new_password: {
+      tr: 'Yeni şifre (en az 6 karakter):',
+      en: 'New password (at least 6 characters):',
+    },
+
     // --- messages / confirmations ---
     confirm_delete: {
       tr: 'Bu transfer silinsin mi? Bu işlem geri alınamaz.',
       en: 'Delete this transfer? This cannot be undone.',
+    },
+    confirm_delete_group: {
+      tr: 'Bu gruptaki tüm transferler silinsin mi? Bu işlem geri alınamaz.',
+      en: 'Delete all transfers in this group? This cannot be undone.',
     },
     added_one: { tr: 'Transfer eklendi.', en: 'Transfer added.' },
     added_many: { tr: '{n} yolcu eklendi.', en: '{n} passengers added.' },
     saved: { tr: 'Değişiklikler kaydedildi.', en: 'Changes saved.' },
     err_network: { tr: 'Bağlantı hatası. Lütfen tekrar deneyin.', en: 'Network error. Please try again.' },
     err_generic: { tr: 'Bir şeyler ters gitti.', en: 'Something went wrong.' },
+    err_bad_datetime: {
+      tr: 'Tarih/saat biçimi gg/aa/yyyy ss:dd olmalı (örn. 10/06/2026 18:30).',
+      en: 'Date/time must be dd/mm/yyyy hh:mm (e.g. 10/06/2026 18:30).',
+    },
 
     // --- placeholders ---
     ph_flight: { tr: 'TK1234', en: 'TK1234' },
     ph_passenger: { tr: 'Yolcu adı soyadı', en: 'Passenger full name' },
     ph_phone: { tr: 'Telefon (opsiyonel)', en: 'Phone (optional)' },
     ph_notes: { tr: 'Opsiyonel not', en: 'Optional note' },
+    ph_datetime: { tr: 'gg/aa/yyyy ss:dd', en: 'dd/mm/yyyy hh:mm' },
 
     // --- backend error codes (err_<code>) ---
     err_fields_required: { tr: 'Kullanıcı adı ve şifre gerekli.', en: 'Username and password are required.' },
     err_invalid_credentials: { tr: 'Kullanıcı adı veya şifre hatalı.', en: 'Invalid username or password.' },
+    err_too_many_attempts: {
+      tr: 'Çok fazla başarısız deneme. Lütfen birazdan tekrar deneyin.',
+      en: 'Too many failed attempts. Please try again later.',
+    },
+    err_admin_not_configured: {
+      tr: 'Admin girişi yapılandırılmamış (ADMIN_PASS ayarlı değil).',
+      en: 'Admin login is not configured (ADMIN_PASS not set).',
+    },
     err_reg_required: { tr: 'Otel adı, kullanıcı adı ve şifre gerekli.', en: 'Hotel name, username and password are required.' },
     err_password_short: { tr: 'Şifre en az 6 karakter olmalı.', en: 'Password must be at least 6 characters.' },
     err_username_taken: { tr: 'Bu kullanıcı adı zaten alınmış.', en: 'That username is already taken.' },
@@ -112,20 +162,22 @@
     return s;
   }
 
-  // Format a stored datetime ('YYYY-MM-DDTHH:MM') in Turkey-friendly style
-  // (gün.ay.yıl 24h). Falls back to en-GB (also day-first, 24h) in English.
+  // Format a stored datetime ('YYYY-MM-DDTHH:MM') as dd/mm/yyyy HH:mm (24h, no
+  // AM/PM), e.g. 02/06/2026 18:30. Parsed by regex so the exact wall-clock time
+  // the hotel entered is shown verbatim — no locale/timezone surprises.
   function fmtDateTime(s) {
     if (!s) return '—';
+    const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(s);
+    if (m) {
+      const [, y, mo, d, h, mi] = m;
+      return `${d}/${mo}/${y} ${h}:${mi}`;
+    }
     const d = new Date(s);
     if (isNaN(d)) return s;
-    const locale = lang === 'tr' ? 'tr-TR' : 'en-GB';
-    return d.toLocaleString(locale, {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(
+      d.getHours()
+    )}:${p(d.getMinutes())}`;
   }
 
   function apply(root) {

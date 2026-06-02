@@ -11,7 +11,6 @@
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
-const bcrypt = require('bcryptjs');
 
 // Resolve where the SQLite file lives:
 //   1. DB_PATH env var always wins (set DB_PATH=/data/transfers.db on Railway).
@@ -82,52 +81,20 @@ function createTables() {
   `);
 }
 
-function seed() {
-  const SALT_ROUNDS = 10;
-
-  // Seed driver accounts only if the table is empty (first run).
-  const driverCount = db.prepare('SELECT COUNT(*) AS c FROM drivers').get().c;
-  if (driverCount === 0) {
-    const drivers = [
-      { username: 'sofor1', password: 'Sofor123', full_name: 'Driver One' },
-      { username: 'sofor2', password: 'Sofor456', full_name: 'Driver Two' },
-      { username: 'sofor3', password: 'Sofor789', full_name: 'Driver Three' },
-    ];
-    const insert = db.prepare(
-      'INSERT INTO drivers (username, password_hash, full_name) VALUES (?, ?, ?)'
-    );
-    const insertMany = db.transaction((rows) => {
-      for (const d of rows) {
-        insert.run(d.username, bcrypt.hashSync(d.password, SALT_ROUNDS), d.full_name);
-      }
-    });
-    insertMany(drivers);
-    console.log(`[seed] Inserted ${drivers.length} driver account(s).`);
-  }
-
-  // Seed demo hotel accounts only if the table is empty (first run).
-  const hotelCount = db.prepare('SELECT COUNT(*) AS c FROM hotels').get().c;
-  if (hotelCount === 0) {
-    const hotels = [
-      { name: 'Demo Hotel One', username: 'hotel1', password: 'Hotel123' },
-      { name: 'Demo Hotel Two', username: 'hotel2', password: 'Hotel456' },
-    ];
-    const insert = db.prepare(
-      'INSERT INTO hotels (name, username, password_hash) VALUES (?, ?, ?)'
-    );
-    const insertMany = db.transaction((rows) => {
-      for (const h of rows) {
-        insert.run(h.name, h.username, bcrypt.hashSync(h.password, SALT_ROUNDS));
-      }
-    });
-    insertMany(hotels);
-    console.log(`[seed] Inserted ${hotels.length} demo hotel account(s).`);
+// Add columns introduced after a database may have first been created, so older
+// SQLite files (e.g. a local dev DB) keep working without being wiped. Safe to
+// run on every startup — each change is checked before it's applied.
+function migrate() {
+  const cols = db.prepare('PRAGMA table_info(transfers)').all().map((c) => c.name);
+  if (!cols.includes('group_id')) {
+    db.exec('ALTER TABLE transfers ADD COLUMN group_id TEXT');
+    console.log('[migrate] Added transfers.group_id column.');
   }
 }
 
 function init() {
   createTables();
-  seed();
+  migrate();
   console.log(`[db] SQLite ready at ${DB_PATH}`);
 }
 

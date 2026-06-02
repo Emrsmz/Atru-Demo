@@ -10,6 +10,7 @@ const path = require('path');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../database');
+const loginLimiter = require('./loginLimiter');
 
 const router = express.Router();
 const VIEWS = path.join(__dirname, '..', 'views');
@@ -41,6 +42,11 @@ router.get('/', requireDriverPage, (req, res) => {
 
 // --- Auth ---
 router.post('/login', (req, res) => {
+  if (loginLimiter.blocked(req)) {
+    return res
+      .status(429)
+      .json({ error: 'Too many failed attempts.', code: 'too_many_attempts' });
+  }
   const { username, password } = req.body || {};
   if (!isNonEmpty(username) || !isNonEmpty(password)) {
     return res
@@ -51,10 +57,12 @@ router.post('/login', (req, res) => {
     .prepare('SELECT * FROM drivers WHERE username = ?')
     .get(username.trim());
   if (!driver || !bcrypt.compareSync(password, driver.password_hash)) {
+    loginLimiter.fail(req);
     return res
       .status(401)
       .json({ error: 'Invalid username or password.', code: 'invalid_credentials' });
   }
+  loginLimiter.succeed(req);
   req.session.driverId = driver.id;
   req.session.driverName = driver.full_name || driver.username;
   req.session.driverUsername = driver.username;

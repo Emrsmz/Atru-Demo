@@ -32,6 +32,7 @@ const { init, DB_PATH } = require('./database');
 const hotelRoutes = require('./routes/hotel');
 const driverRoutes = require('./routes/driver');
 const apiRoutes = require('./routes/api');
+const adminRoutes = require('./routes/admin');
 
 // Create tables + seed default accounts on first run.
 init();
@@ -85,6 +86,7 @@ app.post('/logout', (req, res) => {
 // --- Feature routers ---
 app.use('/', hotelRoutes); // /login, /register, /hotel, /hotel/transfer...
 app.use('/driver', driverRoutes); // /driver/login, /driver, /driver/transfer/:id/complete
+app.use('/admin', adminRoutes); // /admin/login, /admin, /admin/hotels, /admin/drivers...
 app.use('/api', apiRoutes); // /api/transfers, /api/all-transfers, /api/me
 
 // --- 404 fallback ---

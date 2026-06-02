@@ -133,6 +133,9 @@ a:hover {
 .auth-body.driver-theme {
   background: linear-gradient(160deg, #064e3b 0%, #059669 55%, #10b981 100%);
 }
+.auth-body.admin-theme {
+  background: linear-gradient(160deg, #312e81 0%, #4338ca 55%, #6366f1 100%);
+}
 .auth-card {
   width: 100%;
   max-width: 380px;
@@ -241,6 +244,9 @@ textarea {
 }
 .driver-theme .topbar {
   background: #064e3b;
+}
+.admin-page .topbar {
+  background: #312e81;
 }
 .topbar-inner {
   max-width: 1080px;
@@ -380,6 +386,17 @@ textarea {
   text-align: center;
   color: var(--muted);
   padding: 28px 12px;
+}
+
+/* ===== Grouped passengers (hotel table) ===== */
+/* Cells shared by a group (flight / arrival / departure / notes) are merged via
+   rowspan; tint + top-align them so it reads as one booking with many guests. */
+.data-table td.cell-shared {
+  vertical-align: top;
+  background: #f3f7ff;
+}
+.data-table tr.grp-start td {
+  border-top: 2px solid #bfdbfe;
 }
 
 /* ===== Badges ===== */
@@ -653,6 +670,44 @@ textarea {
   color: #fff;
 }
 
+/* ===== Custom date-time field (forces gg/aa/yyyy 24h + 📅 picker) ===== */
+.dt-field {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.dt-field .dt-text {
+  flex: 1 1 auto;
+}
+.dt-field .dt-pick {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dt-field .dt-pick:hover {
+  background: #eef2f7;
+  border-color: #cbd5e1;
+}
+/* Native picker stays rendered (so showPicker works) but visually hidden. */
+.dt-field .dt-native {
+  position: absolute;
+  left: 12px;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ===== Driver list (stacked) view ===== */
 .cards.as-list {
   display: flex;
@@ -715,6 +770,131 @@ textarea {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* ===== Grouped trip (driver: card + list views) ===== */
+.pax-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.tc-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tc-pax,
+.lg-pax {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pax-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.pax-row.is-done {
+  background: #f4fdf7;
+}
+.pax-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pax-name {
+  font-weight: 700;
+}
+.pax-phone {
+  font-size: 13px;
+  color: var(--muted);
+}
+.pax-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 6px solid #eab308;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 12px 16px;
+}
+.list-group.is-pending {
+  border-left-color: #eab308;
+  background: #fffdf5;
+}
+.list-group.is-done {
+  border-left-color: var(--success);
+  background: #f4fdf7;
+}
+.lg-head {
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+}
+
+/* ===== Admin panel ===== */
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Add/edit modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.4);
+  padding: 22px;
+}
+.modal-card h3 {
+  margin: 0 0 16px;
+  font-size: 17px;
+}
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.modal-actions .btn {
+  flex: 1;
 }
 
 /* ===== Responsive ===== */

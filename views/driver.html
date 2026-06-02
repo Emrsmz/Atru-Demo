@@ -114,6 +114,52 @@
         return b;
       }
 
+      // Group transfers that belong to the same booking (same group_id) so a
+      // trip's passengers are shown together. Older rows (no group_id) stay solo.
+      function groupTransfers(list) {
+        const map = new Map();
+        const order = [];
+        for (const t of list) {
+          const key = t.group_id ? 'g:' + t.group_id : 's:' + t.id;
+          if (!map.has(key)) {
+            map.set(key, []);
+            order.push(key);
+          }
+          map.get(key).push(t);
+        }
+        return order.map((k) => map.get(k));
+      }
+      function countPill(n) {
+        const s = document.createElement('span');
+        s.className = 'pax-count';
+        s.textContent = '👤 ' + n;
+        return s;
+      }
+      // One passenger inside a grouped trip: name + phone, own status + actions.
+      function paxRow(t) {
+        const row = document.createElement('div');
+        row.className = 'pax-row ' + (t.status === 'completed' ? 'is-done' : 'is-pending');
+        const info = document.createElement('div');
+        info.className = 'pax-info';
+        const name = document.createElement('span');
+        name.className = 'pax-name';
+        name.textContent = t.passenger_name;
+        info.appendChild(name);
+        if (t.phone) {
+          const ph = document.createElement('span');
+          ph.className = 'pax-phone';
+          ph.textContent = t.phone;
+          info.appendChild(ph);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'pax-actions';
+        actions.appendChild(badge(t.status));
+        if (t.phone) actions.appendChild(callLink(t.phone));
+        actions.appendChild(toggleBtn(t));
+        row.append(info, actions);
+        return row;
+      }
+
       // --- card view ---
       function card(t) {
         const c = document.createElement('article');
@@ -144,6 +190,38 @@
         if (t.phone) foot.append(callLink(t.phone));
         foot.append(toggleBtn(t));
         c.append(head, name, grid, foot);
+        return c;
+      }
+
+      // Card for a whole booking: shared flight/hotel/times + a passenger list.
+      function groupCard(group) {
+        const lead = group[0];
+        const allDone = group.every((t) => t.status === 'completed');
+        const c = document.createElement('article');
+        c.className = 'transfer-card ' + (allDone ? 'is-done' : 'is-pending');
+        const head = document.createElement('div');
+        head.className = 'tc-head';
+        const left = document.createElement('div');
+        left.className = 'tc-head-left';
+        const flight = document.createElement('span');
+        flight.className = 'tc-flight';
+        flight.textContent = lead.flight_code;
+        left.append(flight, countPill(group.length));
+        const hotel = document.createElement('span');
+        hotel.className = 'tc-hotel';
+        hotel.textContent = lead.hotel_name;
+        head.append(left, hotel);
+        const grid = document.createElement('div');
+        grid.className = 'tc-grid';
+        grid.append(
+          field(i18n.t('arrival_short'), i18n.fmtDateTime(lead.arrival_datetime)),
+          field(i18n.t('departure_short'), i18n.fmtDateTime(lead.departure_datetime))
+        );
+        if (lead.notes) grid.append(field(i18n.t('col_notes'), lead.notes));
+        const pax = document.createElement('div');
+        pax.className = 'tc-pax';
+        for (const t of group) pax.appendChild(paxRow(t));
+        c.append(head, grid, pax);
         return c;
       }
 
@@ -187,13 +265,48 @@
         return r;
       }
 
+      // List entry for a whole booking: shared header + stacked passenger rows.
+      function groupRow(group) {
+        const lead = group[0];
+        const allDone = group.every((t) => t.status === 'completed');
+        const wrap = document.createElement('div');
+        wrap.className = 'list-group ' + (allDone ? 'is-done' : 'is-pending');
+        const head = document.createElement('div');
+        head.className = 'lg-head';
+        const flight = document.createElement('span');
+        flight.className = 'lr-flight';
+        flight.textContent = lead.flight_code;
+        const hotel = document.createElement('span');
+        hotel.className = 'lr-hotel';
+        hotel.textContent = lead.hotel_name;
+        head.append(
+          flight,
+          hotel,
+          countPill(group.length),
+          meta(i18n.t('arrival_short'), i18n.fmtDateTime(lead.arrival_datetime))
+        );
+        if (lead.departure_datetime) {
+          head.append(meta(i18n.t('departure_short'), i18n.fmtDateTime(lead.departure_datetime)));
+        }
+        const pax = document.createElement('div');
+        pax.className = 'lg-pax';
+        for (const t of group) pax.appendChild(paxRow(t));
+        wrap.append(head, pax);
+        return wrap;
+      }
+
       function render() {
         const list = allTransfers.filter((t) => matchesFilter(t, currentFilter));
         cardsEl.replaceChildren();
         cardsEl.classList.toggle('as-list', viewMode === 'list');
         emptyEl.classList.toggle('hidden', list.length > 0);
-        for (const t of list) {
-          cardsEl.appendChild(viewMode === 'list' ? listRow(t) : card(t));
+        for (const group of groupTransfers(list)) {
+          const single = group.length === 1;
+          if (viewMode === 'list') {
+            cardsEl.appendChild(single ? listRow(group[0]) : groupRow(group));
+          } else {
+            cardsEl.appendChild(single ? card(group[0]) : groupCard(group));
+          }
         }
       }
 

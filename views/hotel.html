@@ -35,12 +35,26 @@
             </label>
             <label>
               <span><span data-i18n="arrival">Geliş tarihi &amp; saati</span> *</span>
-              <input name="arrival_datetime" type="datetime-local" required />
+              <div class="dt-field">
+                <input class="dt-text" name="arrival_datetime" type="text"
+                  inputmode="numeric" autocomplete="off" required
+                  data-i18n-ph="ph_datetime" placeholder="gg/aa/yyyy ss:dd" />
+                <button type="button" class="dt-pick" tabindex="-1"
+                  data-i18n-title="pick_datetime" title="Takvimden seç">📅</button>
+                <input class="dt-native" type="datetime-local" tabindex="-1" aria-hidden="true" />
+              </div>
             </label>
             <label>
               <span><span data-i18n="departure">Dönüş tarihi &amp; saati</span>
                 <span class="muted" data-i18n="optional">(opsiyonel)</span></span>
-              <input name="departure_datetime" type="datetime-local" />
+              <div class="dt-field">
+                <input class="dt-text" name="departure_datetime" type="text"
+                  inputmode="numeric" autocomplete="off"
+                  data-i18n-ph="ph_datetime" placeholder="gg/aa/yyyy ss:dd" />
+                <button type="button" class="dt-pick" tabindex="-1"
+                  data-i18n-title="pick_datetime" title="Takvimden seç">📅</button>
+                <input class="dt-native" type="datetime-local" tabindex="-1" aria-hidden="true" />
+              </div>
             </label>
             <label class="full">
               <span><span data-i18n="notes">Notlar</span>
@@ -108,13 +122,58 @@
       const whoEl = document.getElementById('who');
 
       let editingId = null;
+      let editingGroupId = null;
       let lastTransfers = [];
 
       // --- helpers ---
-      function toLocalInput(s) {
-        if (!s) return '';
-        const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(s);
-        return m ? `${m[1]}T${m[2]}` : '';
+      // Date/time is always gg/aa/yyyy ss:dd (24h) in the UI, regardless of the
+      // browser locale. The backend stores ISO ('YYYY-MM-DDTHH:MM'); these
+      // helpers convert between the two.
+      function isoToDisplay(s) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(s || '');
+        return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : '';
+      }
+      function displayToIso(s) {
+        const m = /^(\d{2})\/(\d{2})\/(\d{4})[ T](\d{2}):(\d{2})$/.exec((s || '').trim());
+        if (!m) return '';
+        const [, dd, mm, yyyy, hh, mi] = m;
+        if (+mm < 1 || +mm > 12 || +dd < 1 || +dd > 31 || +hh > 23 || +mi > 59) return '';
+        return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+      }
+      // Auto-format digits as the user types: dd/mm/yyyy hh:mm.
+      function maskDateTime(v) {
+        const d = (v || '').replace(/\D/g, '').slice(0, 12);
+        const parts = [d.slice(0, 2)];
+        if (d.length > 2) parts.push(d.slice(2, 4));
+        if (d.length > 4) parts.push(d.slice(4, 8));
+        let out = parts.join('/');
+        if (d.length > 8) {
+          out += ' ' + d.slice(8, 10);
+          if (d.length > 10) out += ':' + d.slice(10, 12);
+        }
+        return out;
+      }
+      // Wire one date-time field: masked text input + 📅 native picker button.
+      function initDtField(field) {
+        const text = field.querySelector('.dt-text');
+        const pick = field.querySelector('.dt-pick');
+        const native = field.querySelector('.dt-native');
+        text.addEventListener('input', (e) => {
+          if (e.inputType && e.inputType.startsWith('delete')) return;
+          text.value = maskDateTime(text.value);
+        });
+        pick.addEventListener('click', () => {
+          native.value = displayToIso(text.value);
+          try {
+            if (typeof native.showPicker === 'function') native.showPicker();
+            else native.focus();
+          } catch (_) {
+            native.focus();
+          }
+        });
+        native.addEventListener('change', () => {
+          if (native.value) text.value = isoToDisplay(native.value);
+        });
       }
       function td(text) {
         const el = document.createElement('td');
@@ -129,8 +188,13 @@
         return span;
       }
       function syncModeLabels() {
-        formTitle.textContent = editingId ? i18n.t('edit_transfer') : i18n.t('add_transfer');
-        submitBtn.textContent = editingId ? i18n.t('save_changes') : i18n.t('add_transfer');
+        const editing = editingId || editingGroupId;
+        formTitle.textContent = editingGroupId
+          ? i18n.t('edit_group')
+          : editingId
+          ? i18n.t('edit_transfer')
+          : i18n.t('add_transfer');
+        submitBtn.textContent = editing ? i18n.t('save_changes') : i18n.t('add_transfer');
         addPassengerBtn.textContent = i18n.t('add_passenger');
       }
 
@@ -157,9 +221,10 @@
           if (b) b.style.display = !editingId && rows.length > 1 ? '' : 'none';
         });
       }
-      function addPassengerRow(name, phone) {
+      function addPassengerRow(name, phone, id) {
         const row = document.createElement('div');
         row.className = 'passenger-row';
+        if (id != null) row.dataset.id = String(id);
         const nameField = makeField('col_passenger', 'p-name', 'text', 'ph_passenger', name, true);
         const phoneField = makeField('col_phone', 'p-phone', 'tel', 'ph_phone', phone, false);
         const rm = document.createElement('button');
@@ -183,6 +248,7 @@
       // --- modes ---
       function setAddMode() {
         editingId = null;
+        editingGroupId = null;
         form.elements.flight_code.value = '';
         form.elements.arrival_datetime.value = '';
         form.elements.departure_datetime.value = '';
@@ -196,13 +262,35 @@
       }
       function startEdit(t) {
         editingId = t.id;
+        editingGroupId = null;
         form.elements.flight_code.value = t.flight_code || '';
-        form.elements.arrival_datetime.value = toLocalInput(t.arrival_datetime);
-        form.elements.departure_datetime.value = toLocalInput(t.departure_datetime);
+        form.elements.arrival_datetime.value = isoToDisplay(t.arrival_datetime);
+        form.elements.departure_datetime.value = isoToDisplay(t.departure_datetime);
         form.elements.notes.value = t.notes || '';
         passengersEl.replaceChildren();
         addPassengerRow(t.passenger_name || '', t.phone || '');
         addPassengerBtn.classList.add('hidden');
+        cancelBtn.classList.remove('hidden');
+        formMsg.textContent = '';
+        formMsg.className = 'form-msg';
+        syncModeLabels();
+        updateRemoveButtons();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      // Edit a whole booking: shared fields + every passenger at once, and you
+      // can add (task: add passenger later) or remove rows before saving.
+      function startGroupEdit(group) {
+        const lead = group[0];
+        editingId = null;
+        editingGroupId = lead.group_id;
+        form.elements.flight_code.value = lead.flight_code || '';
+        form.elements.arrival_datetime.value = isoToDisplay(lead.arrival_datetime);
+        form.elements.departure_datetime.value = isoToDisplay(lead.departure_datetime);
+        form.elements.notes.value = lead.notes || '';
+        passengersEl.replaceChildren();
+        for (const t of group) addPassengerRow(t.passenger_name || '', t.phone || '', t.id);
+        if (passengersEl.children.length === 0) addPassengerRow('', '');
+        addPassengerBtn.classList.remove('hidden');
         cancelBtn.classList.remove('hidden');
         formMsg.textContent = '';
         formMsg.className = 'form-msg';
@@ -233,38 +321,123 @@
         const { transfers } = await res.json();
         render(transfers || []);
       }
+      // Group transfers added together (same group_id) so they share one set of
+      // flight / arrival / departure / notes cells, merged via rowspan. Rows
+      // without a group_id (older records) each become their own group of one.
+      function groupTransfers(transfers) {
+        const map = new Map();
+        const order = [];
+        for (const t of transfers) {
+          const key = t.group_id ? 'g:' + t.group_id : 's:' + t.id;
+          if (!map.has(key)) {
+            map.set(key, []);
+            order.push(key);
+          }
+          map.get(key).push(t);
+        }
+        return order.map((k) => map.get(k));
+      }
+      function actionsCell(t) {
+        const actions = document.createElement('td');
+        actions.className = 'row-actions';
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-sm btn-ghost';
+        editBtn.textContent = i18n.t('edit');
+        editBtn.addEventListener('click', () => startEdit(t));
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn-sm btn-danger';
+        delBtn.textContent = i18n.t('delete');
+        delBtn.addEventListener('click', () => removeTransfer(t.id));
+        actions.append(editBtn, delBtn);
+        return actions;
+      }
+      // Actions for a whole booking (group_id present): edit/delete the group.
+      function groupActionsCell(group, span) {
+        const actions = document.createElement('td');
+        actions.className = 'row-actions';
+        if (span > 1) {
+          actions.rowSpan = span;
+          actions.style.verticalAlign = 'top';
+        }
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-sm btn-ghost';
+        editBtn.textContent = i18n.t('edit');
+        editBtn.addEventListener('click', () => startGroupEdit(group));
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn-sm btn-danger';
+        delBtn.textContent = i18n.t('delete');
+        delBtn.addEventListener('click', () => removeGroup(group[0].group_id));
+        actions.append(editBtn, delBtn);
+        return actions;
+      }
       function render(transfers) {
         lastTransfers = transfers;
         rowsEl.replaceChildren();
         countEl.textContent = transfers.length + ' ' + i18n.t('records_suffix');
         emptyEl.classList.toggle('hidden', transfers.length > 0);
-        for (const t of transfers) {
-          const tr = document.createElement('tr');
-          if (t.status === 'completed') tr.classList.add('row-done');
-          tr.appendChild(td(t.flight_code));
-          tr.appendChild(td(t.passenger_name));
-          tr.appendChild(td(i18n.fmtDateTime(t.arrival_datetime)));
-          tr.appendChild(td(i18n.fmtDateTime(t.departure_datetime)));
-          tr.appendChild(td(t.phone));
-          tr.appendChild(td(t.notes));
-          const st = document.createElement('td');
-          st.appendChild(statusBadge(t.status));
-          tr.appendChild(st);
-          const actions = document.createElement('td');
-          actions.className = 'row-actions';
-          const editBtn = document.createElement('button');
-          editBtn.type = 'button';
-          editBtn.className = 'btn btn-sm btn-ghost';
-          editBtn.textContent = i18n.t('edit');
-          editBtn.addEventListener('click', () => startEdit(t));
-          const delBtn = document.createElement('button');
-          delBtn.type = 'button';
-          delBtn.className = 'btn btn-sm btn-danger';
-          delBtn.textContent = i18n.t('delete');
-          delBtn.addEventListener('click', () => removeTransfer(t.id));
-          actions.append(editBtn, delBtn);
-          tr.appendChild(actions);
-          rowsEl.appendChild(tr);
+        for (const group of groupTransfers(transfers)) {
+          const span = group.length;
+          const grouped = span > 1;
+          const managed = !!group[0].group_id;
+          group.forEach((t, idx) => {
+            const tr = document.createElement('tr');
+            if (t.status === 'completed') tr.classList.add('row-done');
+            if (grouped) {
+              tr.classList.add('grp');
+              if (idx === 0) tr.classList.add('grp-start');
+            }
+            // Shared cell: flight — only on the first row, spanning the group.
+            if (idx === 0) {
+              const flightTd = td(t.flight_code);
+              if (grouped) {
+                flightTd.rowSpan = span;
+                flightTd.classList.add('cell-shared');
+              }
+              tr.appendChild(flightTd);
+            }
+            // Per-passenger: name.
+            tr.appendChild(td(t.passenger_name));
+            // Shared cells: arrival + departure — only on the first row.
+            if (idx === 0) {
+              const arrTd = td(i18n.fmtDateTime(t.arrival_datetime));
+              const depTd = td(i18n.fmtDateTime(t.departure_datetime));
+              if (grouped) {
+                arrTd.rowSpan = span;
+                arrTd.classList.add('cell-shared');
+                depTd.rowSpan = span;
+                depTd.classList.add('cell-shared');
+              }
+              tr.appendChild(arrTd);
+              tr.appendChild(depTd);
+            }
+            // Per-passenger: phone.
+            tr.appendChild(td(t.phone));
+            // Shared cell: notes — only on the first row.
+            if (idx === 0) {
+              const notesTd = td(t.notes);
+              if (grouped) {
+                notesTd.rowSpan = span;
+                notesTd.classList.add('cell-shared');
+              }
+              tr.appendChild(notesTd);
+            }
+            // Per-passenger: status.
+            const st = document.createElement('td');
+            st.appendChild(statusBadge(t.status));
+            tr.appendChild(st);
+            // Actions: group-managed bookings get one shared (spanning) cell with
+            // group edit/delete; legacy rows (no group_id) keep per-row actions.
+            if (managed) {
+              if (idx === 0) tr.appendChild(groupActionsCell(group, span));
+            } else {
+              tr.appendChild(actionsCell(t));
+            }
+            rowsEl.appendChild(tr);
+          });
         }
       }
 
@@ -272,14 +445,33 @@
         e.preventDefault();
         formMsg.textContent = '';
         formMsg.className = 'form-msg';
+        const departureRaw = form.elements.departure_datetime.value.trim();
+        const arrival_datetime = displayToIso(form.elements.arrival_datetime.value);
+        const departure_datetime = displayToIso(departureRaw);
+        if (!arrival_datetime || (departureRaw && !departure_datetime)) {
+          formMsg.textContent = i18n.t('err_bad_datetime');
+          formMsg.classList.add('error');
+          return;
+        }
         const shared = {
           flight_code: form.elements.flight_code.value,
-          arrival_datetime: form.elements.arrival_datetime.value,
-          departure_datetime: form.elements.departure_datetime.value,
+          arrival_datetime,
+          departure_datetime,
           notes: form.elements.notes.value,
         };
         let url, method, payload;
-        if (editingId) {
+        if (editingGroupId) {
+          const passengers = Array.from(passengersEl.children)
+            .map((r) => ({
+              id: r.dataset.id ? Number(r.dataset.id) : undefined,
+              passenger_name: r.querySelector('.p-name').value,
+              phone: r.querySelector('.p-phone').value,
+            }))
+            .filter((p) => p.passenger_name.trim());
+          payload = { ...shared, passengers };
+          url = `/hotel/group/${editingGroupId}`;
+          method = 'PUT';
+        } else if (editingId) {
           const row = passengersEl.children[0];
           payload = {
             ...shared,
@@ -317,7 +509,7 @@
             formMsg.classList.add('error');
             return;
           }
-          const wasEditing = !!editingId;
+          const wasEditing = !!editingId || !!editingGroupId;
           setAddMode();
           await load();
           formMsg.className = 'form-msg';
@@ -343,6 +535,19 @@
         }
       }
 
+      async function removeGroup(groupId) {
+        if (!confirm(i18n.t('confirm_delete_group'))) return;
+        const res = await fetch(`/hotel/group/${groupId}`, { method: 'DELETE' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (res.ok) {
+          if (editingGroupId === groupId) setAddMode();
+          load();
+        }
+      }
+
       document.getElementById('logout').addEventListener('click', async () => {
         await fetch('/logout', { method: 'POST' });
         window.location.href = '/login';
@@ -354,6 +559,7 @@
         render(lastTransfers);
       });
 
+      document.querySelectorAll('.dt-field').forEach(initDtField);
       loadMe();
       setAddMode();
       load();
