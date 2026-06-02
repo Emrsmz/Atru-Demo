@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="app_title">Transfer Yönetim Sistemi</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="driver-theme">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="brand-icon">🚐</span> <span data-i18n="driver_panel">Sürücü Paneli</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="lang-switch" id="lang-switch"></div>
+          <span id="who" class="who"></span>
+          <button id="logout" class="btn btn-ghost btn-sm" type="button" data-i18n="logout">Çıkış</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="driver-head">
+        <div class="filters" id="filters">
+          <button class="chip active" data-filter="today" type="button" data-i18n="filter_today">Bugün</button>
+          <button class="chip" data-filter="upcoming" type="button" data-i18n="filter_upcoming">Yaklaşan</button>
+          <button class="chip" data-filter="completed" type="button" data-i18n="filter_completed">Tamamlanan</button>
+          <button class="chip" data-filter="all" type="button" data-i18n="filter_all">Tümü</button>
+        </div>
+        <div class="driver-head-right">
+          <div class="view-switch" id="view-switch">
+            <button class="view-btn" data-view="list" type="button" data-i18n="view_list">Liste</button>
+            <button class="view-btn" data-view="cards" type="button" data-i18n="view_cards">Kart</button>
+          </div>
+          <div class="pending-badge">
+            <span data-i18n="pending_badge">Bekleyen</span>
+            <span id="pending-count" class="pending-num">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="cards" class="cards"></div>
+      <p id="empty" class="empty hidden" data-i18n="empty_driver">Bu görünümde transfer yok.</p>
+    </main>
+
+    <script>
+      const cardsEl = document.getElementById('cards');
+      const emptyEl = document.getElementById('empty');
+      const pendingCountEl = document.getElementById('pending-count');
+      const filtersEl = document.getElementById('filters');
+      const viewSwitch = document.getElementById('view-switch');
+      const whoEl = document.getElementById('who');
+
+      let allTransfers = [];
+      let currentFilter = 'today';
+      let viewMode = localStorage.getItem('tms_driver_view') || 'cards';
+
+      function todayStr() {
+        const d = new Date();
+        const p = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      }
+      function matchesFilter(t, filter) {
+        const datePart = (t.arrival_datetime || '').slice(0, 10);
+        switch (filter) {
+          case 'today':
+            return datePart === todayStr();
+          case 'upcoming': {
+            const d = new Date(t.arrival_datetime);
+            return !isNaN(d) && d.getTime() >= Date.now() && t.status !== 'completed';
+          }
+          case 'completed':
+            return t.status === 'completed';
+          case 'all':
+          default:
+            return true;
+        }
+      }
+
+      // --- shared pieces ---
+      function field(label, value) {
+        const wrap = document.createElement('div');
+        wrap.className = 'field';
+        const l = document.createElement('span');
+        l.className = 'field-label';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.className = 'field-value';
+        v.textContent = value == null || value === '' ? '—' : value;
+        wrap.append(l, v);
+        return wrap;
+      }
+      function badge(status) {
+        const b = document.createElement('span');
+        b.className = 'badge ' + (status === 'completed' ? 'badge-done' : 'badge-pending');
+        b.textContent = status === 'completed' ? i18n.t('status_completed') : i18n.t('status_pending');
+        return b;
+      }
+      function callLink(phone) {
+        const a = document.createElement('a');
+        a.className = 'btn btn-sm btn-ghost';
+        a.href = 'tel:' + phone;
+        a.textContent = i18n.t('call');
+        return a;
+      }
+      function toggleBtn(t) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm ' + (t.status === 'completed' ? 'btn-ghost' : 'btn-success');
+        b.textContent = t.status === 'completed' ? i18n.t('mark_pending') : i18n.t('mark_done');
+        b.addEventListener('click', () => toggleComplete(t.id));
+        return b;
+      }
+
+      // --- card view ---
+      function card(t) {
+        const c = document.createElement('article');
+        c.className = 'transfer-card ' + (t.status === 'completed' ? 'is-done' : 'is-pending');
+        const head = document.createElement('div');
+        head.className = 'tc-head';
+        const flight = document.createElement('span');
+        flight.className = 'tc-flight';
+        flight.textContent = t.flight_code;
+        const hotel = document.createElement('span');
+        hotel.className = 'tc-hotel';
+        hotel.textContent = t.hotel_name;
+        head.append(flight, hotel);
+        const name = document.createElement('div');
+        name.className = 'tc-name';
+        name.textContent = t.passenger_name;
+        const grid = document.createElement('div');
+        grid.className = 'tc-grid';
+        grid.append(
+          field(i18n.t('arrival_short'), i18n.fmtDateTime(t.arrival_datetime)),
+          field(i18n.t('departure_short'), i18n.fmtDateTime(t.departure_datetime)),
+          field(i18n.t('col_phone'), t.phone)
+        );
+        if (t.notes) grid.append(field(i18n.t('col_notes'), t.notes));
+        const foot = document.createElement('div');
+        foot.className = 'tc-foot';
+        foot.append(badge(t.status));
+        if (t.phone) foot.append(callLink(t.phone));
+        foot.append(toggleBtn(t));
+        c.append(head, name, grid, foot);
+        return c;
+      }
+
+      // --- list (stacked) view ---
+      function meta(label, value) {
+        const wrap = document.createElement('div');
+        wrap.className = 'lr-meta';
+        const l = document.createElement('span');
+        l.className = 'field-label';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.textContent = value == null || value === '' ? '—' : value;
+        wrap.append(l, v);
+        return wrap;
+      }
+      function listRow(t) {
+        const r = document.createElement('div');
+        r.className = 'list-row ' + (t.status === 'completed' ? 'is-done' : 'is-pending');
+        const flight = document.createElement('span');
+        flight.className = 'lr-flight';
+        flight.textContent = t.flight_code;
+        const name = document.createElement('span');
+        name.className = 'lr-name';
+        name.textContent = t.passenger_name;
+        const hotel = document.createElement('span');
+        hotel.className = 'lr-hotel';
+        hotel.textContent = t.hotel_name;
+        r.append(flight, name, hotel, meta(i18n.t('arrival_short'), i18n.fmtDateTime(t.arrival_datetime)));
+        if (t.departure_datetime) {
+          r.append(meta(i18n.t('departure_short'), i18n.fmtDateTime(t.departure_datetime)));
+        }
+        r.append(meta(i18n.t('col_phone'), t.phone));
+        const spacer = document.createElement('span');
+        spacer.className = 'lr-spacer';
+        const actions = document.createElement('div');
+        actions.className = 'lr-actions';
+        actions.append(badge(t.status));
+        if (t.phone) actions.append(callLink(t.phone));
+        actions.append(toggleBtn(t));
+        r.append(spacer, actions);
+        return r;
+      }
+
+      function render() {
+        const list = allTransfers.filter((t) => matchesFilter(t, currentFilter));
+        cardsEl.replaceChildren();
+        cardsEl.classList.toggle('as-list', viewMode === 'list');
+        emptyEl.classList.toggle('hidden', list.length > 0);
+        for (const t of list) {
+          cardsEl.appendChild(viewMode === 'list' ? listRow(t) : card(t));
+        }
+      }
+
+      async function loadMe() {
+        try {
+          const res = await fetch('/api/me');
+          if (res.ok) {
+            const me = await res.json();
+            whoEl.textContent = me.name || '';
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      async function load() {
+        const res = await fetch('/api/all-transfers');
+        if (res.status === 401) {
+          window.location.href = '/driver/login';
+          return;
+        }
+        const data = await res.json();
+        allTransfers = data.transfers || [];
+        pendingCountEl.textContent =
+          data.pending != null
+            ? data.pending
+            : allTransfers.filter((t) => t.status === 'pending').length;
+        render();
+      }
+      async function toggleComplete(id) {
+        const res = await fetch(`/driver/transfer/${id}/complete`, { method: 'POST' });
+        if (res.status === 401) {
+          window.location.href = '/driver/login';
+          return;
+        }
+        if (res.ok) load();
+      }
+
+      // --- controls ---
+      filtersEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('.chip');
+        if (!btn) return;
+        currentFilter = btn.dataset.filter;
+        filtersEl.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
+        render();
+      });
+
+      function syncViewButtons() {
+        viewSwitch
+          .querySelectorAll('.view-btn')
+          .forEach((b) => b.classList.toggle('active', b.dataset.view === viewMode));
+      }
+      viewSwitch.addEventListener('click', (e) => {
+        const btn = e.target.closest('.view-btn');
+        if (!btn) return;
+        viewMode = btn.dataset.view;
+        localStorage.setItem('tms_driver_view', viewMode);
+        syncViewButtons();
+        render();
+      });
+
+      document.getElementById('logout').addEventListener('click', async () => {
+        await fetch('/logout', { method: 'POST' });
+        window.location.href = '/driver/login';
+      });
+
+      window.addEventListener('langchange', render);
+
+      syncViewButtons();
+      loadMe();
+      load();
+    </script>
+  </body>
+</html>

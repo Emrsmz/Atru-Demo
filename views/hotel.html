@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="app_title">Transfer Yönetim Sistemi</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="brand-icon">✈️</span> <span data-i18n="app_title">Transfer Yönetim Sistemi</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="lang-switch" id="lang-switch"></div>
+          <span id="who" class="who"></span>
+          <button id="logout" class="btn btn-ghost btn-sm" type="button" data-i18n="logout">Çıkış</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <div class="card-head">
+          <h2 id="form-title">Transfer ekle</h2>
+        </div>
+        <form id="transfer-form">
+          <div class="form-section grid-form">
+            <h3 class="form-subhead full" data-i18n="flight_section">Uçuş bilgileri</h3>
+            <label>
+              <span><span data-i18n="flight_code">Uçuş kodu</span> *</span>
+              <input name="flight_code" data-i18n-ph="ph_flight" placeholder="TK1234" required />
+            </label>
+            <label>
+              <span><span data-i18n="arrival">Geliş tarihi &amp; saati</span> *</span>
+              <input name="arrival_datetime" type="datetime-local" required />
+            </label>
+            <label>
+              <span><span data-i18n="departure">Dönüş tarihi &amp; saati</span>
+                <span class="muted" data-i18n="optional">(opsiyonel)</span></span>
+              <input name="departure_datetime" type="datetime-local" />
+            </label>
+            <label class="full">
+              <span><span data-i18n="notes">Notlar</span>
+                <span class="muted" data-i18n="optional">(opsiyonel)</span></span>
+              <textarea name="notes" rows="2" data-i18n-ph="ph_notes" placeholder="Opsiyonel not"></textarea>
+            </label>
+            <p class="form-hint" data-i18n="only_arrival_hint">
+              Boş bırakılırsa sadece geliş kaydedilir.
+            </p>
+          </div>
+
+          <div class="form-section">
+            <h3 class="form-subhead" data-i18n="passengers_section">Yolcular</h3>
+            <div id="passengers"></div>
+            <button class="btn btn-ghost btn-sm" type="button" id="add-passenger">+ Yolcu ekle</button>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit" id="submit-btn">Transfer ekle</button>
+            <button class="btn btn-ghost hidden" type="button" id="cancel-edit" data-i18n="cancel">İptal</button>
+            <span id="form-msg" class="form-msg"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 data-i18n="my_transfers">Transferlerim</h2>
+          <span id="count" class="pill"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th data-i18n="col_flight">Uçuş</th>
+                <th data-i18n="col_passenger">Yolcu</th>
+                <th data-i18n="col_arrival">Geliş</th>
+                <th data-i18n="col_departure">Dönüş</th>
+                <th data-i18n="col_phone">Telefon</th>
+                <th data-i18n="col_notes">Notlar</th>
+                <th data-i18n="col_status">Durum</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <p id="empty" class="empty hidden" data-i18n="empty_hotel">
+            Henüz transfer yok. Yukarıdan ilk kaydınızı ekleyin.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const rowsEl = document.getElementById('rows');
+      const emptyEl = document.getElementById('empty');
+      const countEl = document.getElementById('count');
+      const form = document.getElementById('transfer-form');
+      const passengersEl = document.getElementById('passengers');
+      const addPassengerBtn = document.getElementById('add-passenger');
+      const formMsg = document.getElementById('form-msg');
+      const submitBtn = document.getElementById('submit-btn');
+      const cancelBtn = document.getElementById('cancel-edit');
+      const formTitle = document.getElementById('form-title');
+      const whoEl = document.getElementById('who');
+
+      let editingId = null;
+      let lastTransfers = [];
+
+      // --- helpers ---
+      function toLocalInput(s) {
+        if (!s) return '';
+        const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(s);
+        return m ? `${m[1]}T${m[2]}` : '';
+      }
+      function td(text) {
+        const el = document.createElement('td');
+        el.textContent = text == null || text === '' ? '—' : text;
+        return el;
+      }
+      function statusBadge(status) {
+        const span = document.createElement('span');
+        span.className = 'badge ' + (status === 'completed' ? 'badge-done' : 'badge-pending');
+        span.textContent =
+          status === 'completed' ? i18n.t('status_completed') : i18n.t('status_pending');
+        return span;
+      }
+      function syncModeLabels() {
+        formTitle.textContent = editingId ? i18n.t('edit_transfer') : i18n.t('add_transfer');
+        submitBtn.textContent = editingId ? i18n.t('save_changes') : i18n.t('add_transfer');
+        addPassengerBtn.textContent = i18n.t('add_passenger');
+      }
+
+      // --- passenger rows (multiple passengers per operation) ---
+      function makeField(labelKey, inputClass, type, phKey, value, required) {
+        const label = document.createElement('label');
+        const span = document.createElement('span');
+        span.setAttribute('data-i18n', labelKey);
+        span.textContent = i18n.t(labelKey);
+        const input = document.createElement('input');
+        input.className = inputClass;
+        if (type) input.type = type;
+        if (required) input.required = true;
+        input.setAttribute('data-i18n-ph', phKey);
+        input.placeholder = i18n.t(phKey);
+        input.value = value || '';
+        label.append(span, input);
+        return label;
+      }
+      function updateRemoveButtons() {
+        const rows = Array.from(passengersEl.children);
+        rows.forEach((r) => {
+          const b = r.querySelector('.btn-remove');
+          if (b) b.style.display = !editingId && rows.length > 1 ? '' : 'none';
+        });
+      }
+      function addPassengerRow(name, phone) {
+        const row = document.createElement('div');
+        row.className = 'passenger-row';
+        const nameField = makeField('col_passenger', 'p-name', 'text', 'ph_passenger', name, true);
+        const phoneField = makeField('col_phone', 'p-phone', 'tel', 'ph_phone', phone, false);
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'btn-remove';
+        rm.setAttribute('data-i18n', 'remove');
+        rm.textContent = i18n.t('remove');
+        rm.addEventListener('click', () => {
+          row.remove();
+          if (passengersEl.children.length === 0) addPassengerRow('', '');
+          updateRemoveButtons();
+        });
+        row.append(nameField, phoneField, rm);
+        passengersEl.appendChild(row);
+        updateRemoveButtons();
+        return row;
+      }
+
+      addPassengerBtn.addEventListener('click', () => addPassengerRow('', ''));
+
+      // --- modes ---
+      function setAddMode() {
+        editingId = null;
+        form.elements.flight_code.value = '';
+        form.elements.arrival_datetime.value = '';
+        form.elements.departure_datetime.value = '';
+        form.elements.notes.value = '';
+        passengersEl.replaceChildren();
+        addPassengerRow('', '');
+        addPassengerBtn.classList.remove('hidden');
+        cancelBtn.classList.add('hidden');
+        syncModeLabels();
+        updateRemoveButtons();
+      }
+      function startEdit(t) {
+        editingId = t.id;
+        form.elements.flight_code.value = t.flight_code || '';
+        form.elements.arrival_datetime.value = toLocalInput(t.arrival_datetime);
+        form.elements.departure_datetime.value = toLocalInput(t.departure_datetime);
+        form.elements.notes.value = t.notes || '';
+        passengersEl.replaceChildren();
+        addPassengerRow(t.passenger_name || '', t.phone || '');
+        addPassengerBtn.classList.add('hidden');
+        cancelBtn.classList.remove('hidden');
+        formMsg.textContent = '';
+        formMsg.className = 'form-msg';
+        syncModeLabels();
+        updateRemoveButtons();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      cancelBtn.addEventListener('click', setAddMode);
+
+      // --- data ---
+      async function loadMe() {
+        try {
+          const res = await fetch('/api/me');
+          if (res.ok) {
+            const me = await res.json();
+            whoEl.textContent = me.name || '';
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      async function load() {
+        const res = await fetch('/api/transfers');
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        const { transfers } = await res.json();
+        render(transfers || []);
+      }
+      function render(transfers) {
+        lastTransfers = transfers;
+        rowsEl.replaceChildren();
+        countEl.textContent = transfers.length + ' ' + i18n.t('records_suffix');
+        emptyEl.classList.toggle('hidden', transfers.length > 0);
+        for (const t of transfers) {
+          const tr = document.createElement('tr');
+          if (t.status === 'completed') tr.classList.add('row-done');
+          tr.appendChild(td(t.flight_code));
+          tr.appendChild(td(t.passenger_name));
+          tr.appendChild(td(i18n.fmtDateTime(t.arrival_datetime)));
+          tr.appendChild(td(i18n.fmtDateTime(t.departure_datetime)));
+          tr.appendChild(td(t.phone));
+          tr.appendChild(td(t.notes));
+          const st = document.createElement('td');
+          st.appendChild(statusBadge(t.status));
+          tr.appendChild(st);
+          const actions = document.createElement('td');
+          actions.className = 'row-actions';
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'btn btn-sm btn-ghost';
+          editBtn.textContent = i18n.t('edit');
+          editBtn.addEventListener('click', () => startEdit(t));
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'btn btn-sm btn-danger';
+          delBtn.textContent = i18n.t('delete');
+          delBtn.addEventListener('click', () => removeTransfer(t.id));
+          actions.append(editBtn, delBtn);
+          tr.appendChild(actions);
+          rowsEl.appendChild(tr);
+        }
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        formMsg.textContent = '';
+        formMsg.className = 'form-msg';
+        const shared = {
+          flight_code: form.elements.flight_code.value,
+          arrival_datetime: form.elements.arrival_datetime.value,
+          departure_datetime: form.elements.departure_datetime.value,
+          notes: form.elements.notes.value,
+        };
+        let url, method, payload;
+        if (editingId) {
+          const row = passengersEl.children[0];
+          payload = {
+            ...shared,
+            passenger_name: row.querySelector('.p-name').value,
+            phone: row.querySelector('.p-phone').value,
+          };
+          url = `/hotel/transfer/${editingId}`;
+          method = 'PUT';
+        } else {
+          const passengers = Array.from(passengersEl.children)
+            .map((r) => ({
+              passenger_name: r.querySelector('.p-name').value,
+              phone: r.querySelector('.p-phone').value,
+            }))
+            .filter((p) => p.passenger_name.trim());
+          payload = { ...shared, passengers };
+          url = '/hotel/transfer';
+          method = 'POST';
+        }
+        try {
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (res.status === 401) {
+            window.location.href = '/login';
+            return;
+          }
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            formMsg.textContent = body.code
+              ? i18n.t('err_' + body.code)
+              : body.error || i18n.t('err_generic');
+            formMsg.classList.add('error');
+            return;
+          }
+          const wasEditing = !!editingId;
+          setAddMode();
+          await load();
+          formMsg.className = 'form-msg';
+          if (wasEditing) formMsg.textContent = i18n.t('saved');
+          else if (body.count > 1) formMsg.textContent = i18n.t('added_many', { n: body.count });
+          else formMsg.textContent = i18n.t('added_one');
+        } catch (err) {
+          formMsg.textContent = i18n.t('err_network');
+          formMsg.classList.add('error');
+        }
+      });
+
+      async function removeTransfer(id) {
+        if (!confirm(i18n.t('confirm_delete'))) return;
+        const res = await fetch(`/hotel/transfer/${id}`, { method: 'DELETE' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (res.ok) {
+          if (editingId === id) setAddMode();
+          load();
+        }
+      }
+
+      document.getElementById('logout').addEventListener('click', async () => {
+        await fetch('/logout', { method: 'POST' });
+        window.location.href = '/login';
+      });
+
+      // Re-render dynamic content (badges, buttons, dates) when language changes.
+      window.addEventListener('langchange', () => {
+        syncModeLabels();
+        render(lastTransfers);
+      });
+
+      loadMe();
+      setAddMode();
+      load();
+    </script>
+  </body>
+</html>

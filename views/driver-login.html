@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="app_title">Transfer Yönetim Sistemi</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="auth-body driver-theme">
+    <div class="lang-switch auth-lang" id="lang-switch"></div>
+
+    <main class="auth-card">
+      <div class="brand">
+        <div class="brand-icon">🚐</div>
+        <h1 data-i18n="app_title">Transfer Yönetim Sistemi</h1>
+        <p class="muted" data-i18n="driver_panel">Sürücü Paneli</p>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>
+          <span data-i18n="username">Kullanıcı adı</span>
+          <input name="username" autocomplete="username" required />
+        </label>
+        <label>
+          <span data-i18n="password">Şifre</span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" data-i18n="sign_in">Giriş yap</button>
+      </form>
+
+      <p id="auth-msg" class="form-msg" role="alert"></p>
+
+      <div class="auth-foot">
+        <a href="/login" data-i18n="to_hotel_login">← Otel girişi</a>
+      </div>
+    </main>
+
+    <script>
+      const msg = document.getElementById('auth-msg');
+      const loginForm = document.getElementById('login-form');
+
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.textContent = '';
+        msg.className = 'form-msg';
+        const fd = new FormData(loginForm);
+        try {
+          const res = await fetch('/driver/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: fd.get('username'),
+              password: fd.get('password'),
+            }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            msg.textContent = body.code
+              ? i18n.t('err_' + body.code)
+              : body.error || i18n.t('err_generic');
+            msg.classList.add('error');
+            return;
+          }
+          window.location.href = body.redirect || '/driver';
+        } catch (e) {
+          msg.textContent = i18n.t('err_network');
+          msg.classList.add('error');
+        }
+      });
+    </script>
+  </body>
+</html>

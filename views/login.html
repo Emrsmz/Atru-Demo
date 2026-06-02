@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="app_title">Transfer Yönetim Sistemi</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="auth-body">
+    <div class="lang-switch auth-lang" id="lang-switch"></div>
+
+    <main class="auth-card">
+      <div class="brand">
+        <div class="brand-icon">✈️</div>
+        <h1 data-i18n="app_title">Transfer Yönetim Sistemi</h1>
+        <p class="muted" data-i18n="hotel_panel">Otel Paneli</p>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="login" type="button" data-i18n="tab_login">Giriş</button>
+        <button class="tab" data-tab="register" type="button" data-i18n="tab_register">Kayıt Ol</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>
+          <span data-i18n="username">Kullanıcı adı</span>
+          <input name="username" autocomplete="username" required />
+        </label>
+        <label>
+          <span data-i18n="password">Şifre</span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" data-i18n="sign_in">Giriş yap</button>
+      </form>
+
+      <form id="register-form" class="auth-form hidden">
+        <label>
+          <span data-i18n="hotel_name">Otel adı</span>
+          <input name="name" required />
+        </label>
+        <label>
+          <span data-i18n="username">Kullanıcı adı</span>
+          <input name="username" autocomplete="username" required />
+        </label>
+        <label>
+          <span data-i18n="password">Şifre</span>
+          <input name="password" type="password" autocomplete="new-password" minlength="6" required />
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" data-i18n="create_account">Hesap oluştur</button>
+      </form>
+
+      <p id="auth-msg" class="form-msg" role="alert"></p>
+
+      <div class="auth-foot">
+        <a href="/driver/login" data-i18n="to_driver_login">Sürücü girişi →</a>
+      </div>
+    </main>
+
+    <script>
+      const msg = document.getElementById('auth-msg');
+      const tabs = document.querySelectorAll('.tab');
+      const loginForm = document.getElementById('login-form');
+      const registerForm = document.getElementById('register-form');
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          tabs.forEach((t) => t.classList.remove('active'));
+          tab.classList.add('active');
+          msg.textContent = '';
+          msg.className = 'form-msg';
+          const which = tab.dataset.tab;
+          loginForm.classList.toggle('hidden', which !== 'login');
+          registerForm.classList.toggle('hidden', which !== 'register');
+        });
+      });
+
+      function showError(body) {
+        msg.textContent = body.code
+          ? i18n.t('err_' + body.code)
+          : body.error || i18n.t('err_generic');
+        msg.classList.add('error');
+      }
+
+      async function submit(url, data) {
+        msg.textContent = '';
+        msg.className = 'form-msg';
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) return showError(body);
+          window.location.href = body.redirect || '/hotel';
+        } catch (e) {
+          msg.textContent = i18n.t('err_network');
+          msg.classList.add('error');
+        }
+      }
+
+      loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const fd = new FormData(loginForm);
+        submit('/login', { username: fd.get('username'), password: fd.get('password') });
+      });
+
+      registerForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const fd = new FormData(registerForm);
+        submit('/register', {
+          name: fd.get('name'),
+          username: fd.get('username'),
+          password: fd.get('password'),
+        });
+      });
+    </script>
+  </body>
+</html>

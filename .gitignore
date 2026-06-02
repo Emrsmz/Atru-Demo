@@ -1,0 +1,20 @@
+node_modules/
+.env
+
+# Local SQLite files (data + sessions). On Railway these live in the /data volume.
+*.db
+*.db-shm
+*.db-wal
+sessions.db
+transfers.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
