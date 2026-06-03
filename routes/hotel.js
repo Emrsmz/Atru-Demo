@@ -39,6 +39,11 @@ function requireHotelApi(req, res, next) {
 const isNonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
 const str = (v) => String(v == null ? '' : v).trim();
 
+// Phone is optional; when present it may be at most 100 characters (free-form,
+// so spaces / + / multiple numbers are allowed).
+const MAX_PHONE_LEN = 100;
+const phoneOk = (phone) => !phone || phone.length <= MAX_PHONE_LEN;
+
 function readShared(body) {
   return {
     flight_code: str(body.flight_code),
@@ -155,6 +160,11 @@ router.post('/hotel/transfer', requireHotelApi, (req, res) => {
       .status(400)
       .json({ error: 'At least one passenger name is required.', code: 'passenger_required' });
   }
+  if (passengers.some((p) => !phoneOk(p.phone))) {
+    return res
+      .status(400)
+      .json({ error: 'Phone is too long.', code: 'phone_too_long' });
+  }
 
   const insert = db.prepare(
     `INSERT INTO transfers
@@ -223,6 +233,11 @@ router.put('/hotel/transfer/:id', requireHotelApi, (req, res) => {
     return res
       .status(400)
       .json({ error: 'Arrival date & time is required.', code: 'arrival_required' });
+  }
+  if (!phoneOk(phone)) {
+    return res
+      .status(400)
+      .json({ error: 'Phone is too long.', code: 'phone_too_long' });
   }
 
   db.prepare(
@@ -296,6 +311,11 @@ router.put('/hotel/group/:groupId', requireHotelApi, (req, res) => {
     return res
       .status(400)
       .json({ error: 'At least one passenger name is required.', code: 'passenger_required' });
+  }
+  if (passengers.some((p) => !phoneOk(p.phone))) {
+    return res
+      .status(400)
+      .json({ error: 'Phone is too long.', code: 'phone_too_long' });
   }
 
   const existingIds = new Set(existing.map((r) => r.id));

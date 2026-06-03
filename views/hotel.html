@@ -227,6 +227,10 @@
         if (id != null) row.dataset.id = String(id);
         const nameField = makeField('col_passenger', 'p-name', 'text', 'ph_passenger', name, true);
         const phoneField = makeField('col_phone', 'p-phone', 'tel', 'ph_phone', phone, false);
+        // Telefon: serbest biçim (boşluk/+/birden fazla numara), en fazla 100 karakter.
+        const phoneInput = phoneField.querySelector('.p-phone');
+        phoneInput.setAttribute('maxlength', '100');
+        phoneInput.setAttribute('inputmode', 'tel');
         const rm = document.createElement('button');
         rm.type = 'button';
         rm.className = 'btn-remove';

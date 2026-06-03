@@ -149,6 +149,8 @@
     err_arrival_required: { tr: 'Geliş tarihi & saati gerekli.', en: 'Arrival date & time is required.' },
     err_not_found: { tr: 'Transfer bulunamadı.', en: 'Transfer not found.' },
     err_invalid_id: { tr: 'Geçersiz kayıt.', en: 'Invalid id.' },
+    err_phone_too_long: { tr: 'Telefon çok uzun (en fazla 100 karakter).', en: 'Phone is too long (max 100 characters).' },
+    download_backup: { tr: 'Yedeği indir', en: 'Download backup' },
   };
 
   let lang = localStorage.getItem(STORAGE_KEY) || 'tr';

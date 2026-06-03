@@ -845,6 +845,28 @@ textarea {
   border-left-color: var(--success);
   background: #f4fdf7;
 }
+
+/* ===== Yaşam döngüsü renkleri (Tümü görünümü): geliş/gidiş durumuna göre =====
+   Mevcut is-pending/is-done kurallarından sonra geldiği için onları geçersiz kılar.
+   yeşil = ikisi de gerçekleşmeyen, sarı = sadece gelen, kırmızı = gelen giden. */
+.transfer-card.lc-upcoming,
+.list-row.lc-upcoming,
+.list-group.lc-upcoming {
+  border-left-color: #16a34a;
+  background: #f4fdf7;
+}
+.transfer-card.lc-arrived,
+.list-row.lc-arrived,
+.list-group.lc-arrived {
+  border-left-color: #eab308;
+  background: #fffdf5;
+}
+.transfer-card.lc-departed,
+.list-row.lc-departed,
+.list-group.lc-departed {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
 .lg-head {
   display: flex;
   align-items: center;
@@ -898,9 +920,44 @@ textarea {
 }
 
 /* ===== Responsive ===== */
+/* Tappable controls: kill the tap flash and the 300ms delay on touch. */
+.btn,
+.chip,
+.tab,
+.view-btn,
+.lang-btn,
+.dt-pick {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ===== Mobile (app is used mainly on phones) ===== */
 @media (max-width: 600px) {
   .grid-form {
     grid-template-columns: 1fr;
+  }
+  /* Inputs at >=16px so iOS doesn't auto-zoom the page on focus. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+  /* Bigger touch targets. */
+  .btn {
+    min-height: 44px;
+  }
+  .btn-sm {
+    padding: 9px 14px;
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .topbar-inner {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .topbar-actions {
+    gap: 8px;
   }
   .topbar-brand {
     font-size: 15px;
@@ -914,7 +971,30 @@ textarea {
   .card {
     padding: 16px;
   }
+  .card-head {
+    flex-wrap: wrap;
+  }
+  /* Driver controls stack; filter chips scroll sideways instead of wrapping
+     into several lines (saves vertical space on a phone). */
   .driver-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .filters::-webkit-scrollbar {
+    display: none;
+  }
+  .chip {
+    flex: 0 0 auto;
+  }
+  .driver-head-right {
     justify-content: space-between;
   }
   .cards {
@@ -925,7 +1005,7 @@ textarea {
   }
   .passenger-row .btn-remove {
     height: auto;
-    padding: 9px 12px;
+    padding: 11px 12px;
   }
   .lr-spacer {
     display: none;

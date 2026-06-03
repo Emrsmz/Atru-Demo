@@ -24,10 +24,9 @@
     <main class="container">
       <div class="driver-head">
         <div class="filters" id="filters">
-          <button class="chip active" data-filter="today" type="button" data-i18n="filter_today">Bugün</button>
+          <button class="chip active" data-filter="all" type="button" data-i18n="filter_all">Tümü</button>
           <button class="chip" data-filter="upcoming" type="button" data-i18n="filter_upcoming">Yaklaşan</button>
           <button class="chip" data-filter="completed" type="button" data-i18n="filter_completed">Tamamlanan</button>
-          <button class="chip" data-filter="all" type="button" data-i18n="filter_all">Tümü</button>
         </div>
         <div class="driver-head-right">
           <div class="view-switch" id="view-switch">
@@ -54,7 +53,7 @@
       const whoEl = document.getElementById('who');
 
       let allTransfers = [];
-      let currentFilter = 'today';
+      let currentFilter = 'all';
       let viewMode = localStorage.getItem('tms_driver_view') || 'cards';
 
       function todayStr() {
@@ -65,18 +64,30 @@
       function matchesFilter(t, filter) {
         const datePart = (t.arrival_datetime || '').slice(0, 10);
         switch (filter) {
-          case 'today':
-            return datePart === todayStr();
-          case 'upcoming': {
-            const d = new Date(t.arrival_datetime);
-            return !isNaN(d) && d.getTime() >= Date.now() && t.status !== 'completed';
-          }
+          case 'upcoming':
+            // Tüm gelecek (bugün ve sonrası) tamamlanmamış yolcular.
+            return datePart >= todayStr() && t.status !== 'completed';
           case 'completed':
             return t.status === 'completed';
           case 'all':
           default:
             return true;
         }
+      }
+
+      // Bir transferin geliş/gidiş zamanlarına göre yaşam döngüsü rengi (Tümü görünümü):
+      //  - yeşil   (lc-upcoming): geliş henüz gerçekleşmemiş (ikisi de gerçekleşmeyen)
+      //  - sarı    (lc-arrived):  geliş gerçekleşmiş, gidiş gerçekleşmemiş (sadece gelen)
+      //  - kırmızı (lc-departed): hem geliş hem gidiş gerçekleşmiş (gelen giden)
+      function lifecycleClass(t) {
+        const now = Date.now();
+        const arr = t.arrival_datetime ? new Date(t.arrival_datetime).getTime() : NaN;
+        const dep = t.departure_datetime ? new Date(t.departure_datetime).getTime() : NaN;
+        const arrivalPassed = !isNaN(arr) && arr <= now;
+        const departurePassed = !isNaN(dep) && dep <= now;
+        if (arrivalPassed && departurePassed) return 'lc-departed';
+        if (arrivalPassed) return 'lc-arrived';
+        return 'lc-upcoming';
       }
 
       // --- shared pieces ---
@@ -302,11 +313,15 @@
         emptyEl.classList.toggle('hidden', list.length > 0);
         for (const group of groupTransfers(list)) {
           const single = group.length === 1;
+          let el;
           if (viewMode === 'list') {
-            cardsEl.appendChild(single ? listRow(group[0]) : groupRow(group));
+            el = single ? listRow(group[0]) : groupRow(group);
           } else {
-            cardsEl.appendChild(single ? card(group[0]) : groupCard(group));
+            el = single ? card(group[0]) : groupCard(group);
           }
+          // "Tümü" görünümünde kutuyu geliş/gidiş durumuna göre renklendir.
+          if (currentFilter === 'all') el.classList.add(lifecycleClass(group[0]));
+          cardsEl.appendChild(el);
         }
       }
 

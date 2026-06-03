@@ -16,6 +16,7 @@
         <div class="topbar-actions">
           <div class="lang-switch" id="lang-switch"></div>
           <span id="who" class="who"></span>
+          <button id="backup" class="btn btn-ghost btn-sm" type="button" data-i18n="download_backup">Yedeği indir</button>
           <button id="logout" class="btn btn-ghost btn-sm" type="button" data-i18n="logout">Çıkış</button>
         </div>
       </div>
@@ -349,6 +350,10 @@
 
       document.getElementById('add-hotel').addEventListener('click', () => openModal('hotel', 'add', null));
       document.getElementById('add-driver').addEventListener('click', () => openModal('driver', 'add', null));
+      document.getElementById('backup').addEventListener('click', () => {
+        // Browser handles the file download via Content-Disposition.
+        window.location.href = '/admin/backup';
+      });
       document.getElementById('logout').addEventListener('click', async () => {
         await fetch('/logout', { method: 'POST' });
         window.location.href = '/admin/login';

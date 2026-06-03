@@ -12,10 +12,13 @@
  */
 
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { db } = require('../database');
+const { createBackup } = require('../backup');
 const loginLimiter = require('./loginLimiter');
 
 const router = express.Router();
@@ -103,6 +106,29 @@ router.get('/api/data', requireAdminApi, (req, res) => {
     )
     .all();
   res.json({ admin: req.session.adminUser, hotels, drivers, transfers });
+});
+
+// --- Download a fresh database backup (.db file) ---
+// Writes a consistent snapshot to a temp file, streams it, then cleans up.
+router.get('/backup', requireAdminApi, async (req, res) => {
+  const p = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  const name = `transfers-backup-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(
+    d.getDate()
+  )}.db`;
+  const tmp = path.join(os.tmpdir(), `tms-backup-${Date.now()}.db`);
+  try {
+    await createBackup(tmp);
+  } catch (err) {
+    console.error('[admin] backup failed:', err);
+    return res.status(500).json({ error: 'Backup failed.', code: 'backup_failed' });
+  }
+  res.download(tmp, name, (err) => {
+    fs.unlink(tmp, () => {});
+    if (err && !res.headersSent) {
+      res.status(500).json({ error: 'Download failed.', code: 'backup_failed' });
+    }
+  });
 });
 
 // --- Hotels CRUD ---

@@ -8,6 +8,9 @@ node_modules/
 sessions.db
 transfers.db
 
+# Database backups (created by backup.js)
+backups/
+
 # Logs
 *.log
 npm-debug.log*

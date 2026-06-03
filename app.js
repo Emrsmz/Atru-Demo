@@ -29,6 +29,7 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 
 const { init, DB_PATH } = require('./database');
+const { startBackupScheduler } = require('./backup');
 const hotelRoutes = require('./routes/hotel');
 const driverRoutes = require('./routes/driver');
 const apiRoutes = require('./routes/api');
@@ -36,6 +37,9 @@ const adminRoutes = require('./routes/admin');
 
 // Create tables + seed default accounts on first run.
 init();
+
+// Automatic database backups (see backup.js).
+startBackupScheduler();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
